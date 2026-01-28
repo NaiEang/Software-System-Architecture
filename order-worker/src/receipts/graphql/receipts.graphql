@@ -1,0 +1,8 @@
+type Receipt {
+    id: ID!
+    orderId: ID!
+    amount: Float!
+    currency: String!
+    issuedAt: String!
+    items: [ReceiptItem!]!
+}

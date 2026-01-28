@@ -1,30 +1,25 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
+import { Inject, Injectable } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { NotificationsService } from 'src/notifications/notification.service';
 
 @Injectable()
 export class OrdersService {
-  private readonly logger = new Logger(OrdersService.name);
-  private readonly processedOrders: any[] = []; // simple "DB"
+  constructor(
+    @Inject('ORDERS_SERVICE') private readonly client: ClientProxy,
+    private readonly notifications: NotificationsService,
+  ) {}
 
-  @EventPattern('order_created')
-  handleOrderCreated(@Payload() data: any, @Ctx() context: RmqContext) {
-    this.logger.log(`Received order_created event: ${JSON.stringify(data)}`);
-    this.processedOrders.push({
-      ...data,
-      processedAt: new Date().toISOString(),
+  createOrder(orderDto: any) {
+    this.client.emit('order_created', {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      order: orderDto,
+      createdAt: new Date().toISOString(),
     });
-
+    this.notifications.notify('orders', 'order_created', {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      order: orderDto,
+    });
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const channel = context.getChannelRef();
-    const originalMsg = context.getMessage();
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    channel.ack(originalMsg);
-  }
-
-  // Optional: method to view "DB" in logs
-  printAll() {
-    this.logger.log(
-      `All processed orders: ${JSON.stringify(this.processedOrders)}`,
-    );
+    return { status: 'Order accepted', order: orderDto };
   }
 }

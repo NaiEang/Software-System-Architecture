@@ -1,15 +1,100 @@
 version: "3.9"
+
 services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq3
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   postgres:
     image: postgres:16
-    container_name: nest-lab-postgres
+    container_name: postgres_db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: nest_lab
+      POSTGRES_PASSWORD: 2233
+      POSTGRES_DB: nest_db
     ports:
-      - "5432:5432"
+      - "5435:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    command: npm run start:dev
+    ports:
+      - "3000:3000"
+    environment:
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+      DB_HOST: postgres 
+      DB_PORT: 5432
+      DB_NAME: nest_db  # Matches postgres service
+      DB_PASSWORD: 2233
+    volumes:
+      - ./api-gateway:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    command: npm run start:dev
+    ports:
+      - "3001:3000"
+    environment:
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: nest_db
+      DB_PASSWORD: 2233
+    volumes:
+      - ./auth-service:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  order-worker:
+    build: ./order-worker
+    container_name: order-worker
+    command: npm run start:dev
+    environment:
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: nest_db
+      DB_PASSWORD: 2233
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./order-worker:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   pgdata:
